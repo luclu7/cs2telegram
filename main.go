@@ -79,7 +79,7 @@ func main() {
 	}
 
 	//checkandpost(b)
-	dateTicker := time.NewTicker(30 * time.Second)
+	dateTicker := time.NewTicker(10 * time.Minute)
 
 	for {
 		select {
