@@ -5,6 +5,7 @@ import (
 	tb "gopkg.in/tucnak/telebot.v2"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"strings"
@@ -21,44 +22,56 @@ func (x RecipientType) Recipient() string {
 	return x.Channel
 }
 
-func parseflux(url string) (feed *gofeed.Feed) {
+func parseflux(url string) (feed *gofeed.Feed, err error) {
 	parser := gofeed.NewParser()
-	feed, _ = parser.ParseURL(url)
-	return feed
+	parser.Client = &http.Client{Timeout: time.Second * 10}
+	feed, err = parser.ParseURL(url)
+	return feed, err
 }
 
 func read(file string) string {
-	buf, _ := ioutil.ReadFile(file)
+	buf, err := ioutil.ReadFile(file)
+	if err != nil {
+		log.Fatal(err)
+	}
 	final := string(buf)
 	return final
 }
 
 func checkandpost(b *tb.Bot) {
 	log.Print("Downloading and parsing the RSS feed...")
-	feed := parseflux("https://www.commitstrip.com/fr/feed/")
+	feed, err := parseflux("https://www.commitstrip.com/fr/feed/")
+	if err == nil {
+		comic := read("latestcomic.txt")
+		f, err := os.Create("latestcomic.txt")
+		if err != nil {
+			log.Fatal(err)
+			return
+		}
 
-	comic := read("latestcomic.txt")
+		defer f.Close()
 
-	f, err := os.Create("latestcomic.txt")
-	defer f.Close()
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	var toChannel tb.Recipient = RecipientType{Channel: "@commitstrip_fr"}
-	if comic == feed.Items[0].GUID {
-		log.Print("No new comic available")
-		f.WriteString(feed.Items[0].GUID)
+		var toChannel tb.Recipient = RecipientType{Channel: "@commitstrip_fr"}
+		if comic == feed.Items[0].GUID {
+			log.Print("No new comic available")
+			f.WriteString(feed.Items[0].GUID)
+		} else {
+			log.Print("New comic available")
+			r, err := regexp.Compile(`<img[^>]+src="([^">]+)"`)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			matches := r.FindStringSubmatch(feed.Items[0].Content)
+			f.WriteString(feed.Items[0].GUID)
+			picture := &tb.Photo{File: tb.FromURL(matches[1])}
+			message := feed.Items[0].Title + " " + feed.Items[0].Link
+			b.Send(toChannel, message)
+			b.Send(toChannel, picture)
+
+		}
 	} else {
-		log.Print("New comic available")
-		r, _ := regexp.Compile(`<img[^>]+src="([^">]+)"`)
-		matches := r.FindStringSubmatch(feed.Items[0].Content)
-		f.WriteString(feed.Items[0].GUID)
-		picture := &tb.Photo{File: tb.FromURL(matches[1])}
-		message := feed.Items[0].Title + " " + feed.Items[0].Link
-		b.Send(toChannel, message)
-		b.Send(toChannel, picture)
-
+		log.Print("Error downloading/parsing the RSS feed: " + err.Error())
 	}
 }
 
