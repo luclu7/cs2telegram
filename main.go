@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 )
 
@@ -77,8 +76,7 @@ func checkandpost(b *tb.Bot) {
 
 func main() {
 	log.Print("Starting...")
-	token := read("token.txt")
-	token = strings.TrimSuffix(token, "\n")
+	token := os.Getenv("TELEBOT_TOKEN")
 	b, err := tb.NewBot(tb.Settings{
 		Token: token,
 		// You can also set custom API URL. If field is empty it equals to "https://api.telegram.org"
